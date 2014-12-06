@@ -181,15 +181,15 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                    ranAcFile.close();
                                     
                                } else if (size == 0) { //conocido y no se ha modificado 
-                                   ranAcFile.seek(increFileList.get(file.toFile()) - 1);
-                                   if (preSize == 0){ 
-                                       preSize =  increFileList.get(file.toFile());
-                                       ranAcFile.seek(0);
-                                   }
-                                   byte[] data = new byte[(int) preSize];
-                                   ranAcFile.read(data);
-                                   String lastInfo = new String(data);
-                                   //log.info("Repeat : " + file.getFileName() + ", total files: " + sizeFileList.size() + " =>" + lastInfo);
+//                                   ranAcFile.seek(increFileList.get(file.toFile()) - 1);
+//                                   if (preSize == 0){ 
+//                                       preSize =  increFileList.get(file.toFile());
+//                                       ranAcFile.seek(0);
+//                                   }
+//                                   byte[] data = new byte[(int) preSize];
+//                                   ranAcFile.read(data);
+//                                   String lastInfo = new String(data);
+//                                   //log.info("Repeat : " + file.getFileName() + ", total files: " + sizeFileList.size() + " =>" + lastInfo);
                                    ranAcFile.close();
                                     
                                } //no se ha modificado
