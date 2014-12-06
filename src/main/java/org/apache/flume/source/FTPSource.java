@@ -21,6 +21,7 @@ package org.apache.flume.source;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Iterator;
 
 import org.apache.flume.Context;
 import org.apache.flume.Event;
@@ -149,7 +150,8 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                 @Override  
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
                         
-                         refreshList(sizeFileList);
+                            cleanList(sizeFileList);
+                         //refreshList(sizeFileList);
                          if (sizeFileList.containsKey(file.toFile())){ // el archivo es conocido
                                RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");                             
                                ranAcFile.seek(sizeFileList.get(file.toFile()) - 1);
@@ -166,7 +168,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                      sizeFileList.put(file.toFile(), ranAcFile.length());
                                      ranAcFile.close();
                                     
-                               } else if (size == 0) { 
+                               } else if (size == 0) { ;
                                    ranAcFile.close();
                                } //no se ha modificado
                                
@@ -232,6 +234,19 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
             }
         }
     }
+    
+    /*
+    @void, delete file from hashmaps if deleted from ftp
+    */
+    public void cleanList(HashMap<File,Long> map) {
+          for (Iterator<File> iter=map.keySet().iterator();iter.hasNext();) {
+          final File file = iter.next();
+          if (!(file.exists())){ 
+              iter.remove();
+          }
+        }
+    }
+    
     
     /*
     @void Serialize hashmap
