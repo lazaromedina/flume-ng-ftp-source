@@ -55,10 +55,6 @@ import java.io.ObjectInputStream;
 import java.io.FileOutputStream;
 
 import java.io.Serializable;
-import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.charset.Charset;
 
 /*
  * @author Luis Lazaro
@@ -68,7 +64,6 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     private static final Logger log = LoggerFactory.getLogger(FTPSource.class);
     private FTPSourceUtils ftpSourceUtils;
     private HashMap<File, Long> sizeFileList = new HashMap<>();
-    private HashMap<File, Long> increFileList = new HashMap<>();
     
     
    
@@ -83,7 +78,6 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
         log.info("Loading previous flumed data.....  " + getName());
         try {
                 sizeFileList = loadMap("hasmap.ser");
-                increFileList = loadMap("hasmap.ser");
                 } catch (ClassNotFoundException | IOException e){
                     e.printStackTrace();
                     log.error("Fail to load previous flumed data.");
@@ -117,7 +111,6 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     @Override
     public void stop() {
             saveMap(sizeFileList);
-            saveMap(increFileList);
             log.info("Stopping sql source {} ...", getName());
             try { 
                  ftpSourceUtils.getFtpClient().logout();
@@ -156,12 +149,11 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                 @Override  
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
                         
-                         refreshList();
+                         refreshList(sizeFileList);
                          if (sizeFileList.containsKey(file.toFile())){ // el archivo es conocido
                                RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");                             
                                ranAcFile.seek(sizeFileList.get(file.toFile()) - 1);
                                long size = ranAcFile.length() - sizeFileList.get(file.toFile());
-                               long preSize = ranAcFile.length() - increFileList.get(file.toFile());
                                if (size > 0) { //conocido y se ha modificado 
                                    byte[] data = new byte[(int) size];
                                    ranAcFile.read(data);
@@ -171,27 +163,11 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                                                  sizeFileList.size() + ": " +
                                                                  lastInfo
                                                                 );
-                                   synchronized(increFileList){
-                                        increFileList.put(file.toFile(),sizeFileList.get(file.toFile()) );
-                                    }
-                                   synchronized(sizeFileList){
-                                        sizeFileList.put(file.toFile(), ranAcFile.length());
-                                   }
-                                   
-                                   ranAcFile.close();
+                                     sizeFileList.put(file.toFile(), ranAcFile.length());
+                                     ranAcFile.close();
                                     
-                               } else if (size == 0) { //conocido y no se ha modificado 
-//                                   ranAcFile.seek(increFileList.get(file.toFile()) - 1);
-//                                   if (preSize == 0){ 
-//                                       preSize =  increFileList.get(file.toFile());
-//                                       ranAcFile.seek(0);
-//                                   }
-//                                   byte[] data = new byte[(int) preSize];
-//                                   ranAcFile.read(data);
-//                                   String lastInfo = new String(data);
-//                                   //log.info("Repeat : " + file.getFileName() + ", total files: " + sizeFileList.size() + " =>" + lastInfo);
+                               } else if (size == 0) { 
                                    ranAcFile.close();
-                                    
                                } //no se ha modificado
                                
                         } else { //nuevo archivo encontrado
@@ -204,22 +180,14 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                    return FileVisitResult.CONTINUE;
                                     
                                 } else { //normal file
-                                    synchronized(sizeFileList){
-                                        sizeFileList.put(file.toFile(), ranAcFile.length());
-                                    }
-                                    synchronized(increFileList){
-                                        increFileList.put(file.toFile(), ranAcFile.length());
-                                    }
+                                    sizeFileList.put(file.toFile(), ranAcFile.length());
                                     byte[] data = new byte[(int) ranAcFile.length()];
                                     ranAcFile.read(data);
                                     String lastInfo = new String(data);
                                     processMessage("discovered: " + file.getFileName() + "," +
                                                                      attributes.fileKey() + " ," +
-                                                                     sizeFileList.size() + ", " +
-                                                                     ranAcFile.length() + ":" +
-
+                                                                     sizeFileList.size() + ": " +
                                                                       lastInfo
-                                                                     //getLastLine(file.toFile())
                                                                      );
                                     ranAcFile.close();
                                 }
@@ -257,15 +225,10 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     /*
     @void, delete file from hashmaps if deleted from ftp
     */
-    public void refreshList() {
-        for (File file: sizeFileList.keySet()){
+    public void refreshList(HashMap<File, Long> map) {
+        for (File file: map.keySet()){
             if (!(file.exists())){
-               synchronized(sizeFileList){
-                sizeFileList.remove(file);
-               }
-               synchronized(increFileList){
-                increFileList.remove(file);
-               }
+                map.remove(file);
             }
         }
     }
@@ -299,4 +262,3 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     } 
     
 }
-
