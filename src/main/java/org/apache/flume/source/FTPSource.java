@@ -56,6 +56,8 @@ import java.io.ObjectInputStream;
 import java.io.FileOutputStream;
 
 import java.io.Serializable;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 
 /*
  * @author Luis Lazaro
@@ -139,6 +141,18 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
         log.info(lastInfo);
     }
     
+    public void processMessage(byte[] lastInfo){
+        byte[] message = lastInfo;
+        Event event = new SimpleEvent();
+        Map<String, String> headers =  new HashMap<String, String>();  
+        headers.put("timestamp", String.valueOf(System.currentTimeMillis()));
+        event.setBody(message);
+        event.setHeaders(headers);
+        getChannelProcessor().processEvent(event);
+       // log.info(new String(lastInfo));
+    }
+    
+    
     /*
     @void retrieve files from directories
     */
@@ -168,18 +182,19 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                      sizeFileList.put(file.toFile(), ranAcFile.length());
                                      ranAcFile.close();
                                     
-                               } else if (size == 0) { ;
+                               } else if (size == 0) { 
                                    ranAcFile.close();
                                } //no se ha modificado
                                
                         } else { //nuevo archivo encontrado
                                 
                                 RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");
-                                if (ranAcFile.length() > 1000000){
+                                if (ranAcFile.length() > 100000){
                                     log.warn(file.getFileName() + " WARNING : excess initial size, calling butcher.. ");
-                                   // ReadFileWithFixedSizeBuffer(ranAcFile);
-                                   ranAcFile.close();
-                                   return FileVisitResult.CONTINUE;
+                                    sizeFileList.put(file.toFile(), ranAcFile.length());
+                                   ReadFileWithFixedSizeBuffer(ranAcFile);
+                                   //ranAcFile.close();
+                                   //return FileVisitResult.CONTINUE;
                                     
                                 } else { //normal file
                                     sizeFileList.put(file.toFile(), ranAcFile.length());
@@ -204,7 +219,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
             });  
         } catch (IOException ex) {  
           ex.printStackTrace();
-        }  
+        }
     }
     
     
@@ -275,5 +290,24 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
         return hasMap;
         
     } 
+    
+    
+    public void ReadFileWithFixedSizeBuffer(RandomAccessFile aFile) throws IOException{
+        FileChannel inChannel = aFile.getChannel();
+        ByteBuffer buffer = ByteBuffer.allocate(10000);
+        byte[] data = new byte[10000];
+        while(inChannel.read(buffer) > 0)
+        {
+            buffer.flip();
+            for (int i = 0; i < buffer.limit(); i++)
+            {
+                data[i] =buffer.get();
+            }
+            processMessage(data);
+            buffer.clear(); // do something with the data and clear/compact it.
+        }
+        inChannel.close();
+        aFile.close();
+    }
     
 }
