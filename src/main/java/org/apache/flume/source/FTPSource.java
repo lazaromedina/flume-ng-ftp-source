@@ -67,9 +67,6 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     private static final Logger log = LoggerFactory.getLogger(FTPSource.class);
     private FTPSourceUtils ftpSourceUtils;
     private HashMap<File, Long> sizeFileList = new HashMap<>();
-    
-    
-   
        
     @Override
     public void configure(Context context) {            
@@ -280,18 +277,18 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     
     public void ReadFileWithFixedSizeBuffer(RandomAccessFile aFile) throws IOException{
         FileChannel inChannel = aFile.getChannel();
-        ByteBuffer buffer = ByteBuffer.allocate(10000);
+        ByteBuffer buffer = ByteBuffer.allocateDirect(10000);
         
         while(inChannel.read(buffer) > 0)
         {
             byte[] data = new byte[10000];
-            buffer.flip();
-            for (int i = 0; i < buffer.limit(); i++)
+            buffer.flip(); //alias for buffer.limit(buffer.position()).position(0)
+            for (int i = 0;  i < buffer.limit();  i++)
             {
                 data[i] =buffer.get();
             }
             processMessage(data);
-            buffer.clear(); // do something with the data and clear/compact it.
+            buffer.clear(); // sets the limit to the capacity and the position back to 0
         }
         inChannel.close();
         aFile.close();
