@@ -100,7 +100,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
             return PollableSource.Status.READY;
         } catch(InterruptedException inte){
             inte.printStackTrace();
-            return PollableSource.Status.BACKOFF;			
+            return PollableSource.Status.BACKOFF;	//inform the runner thread to back off for a bit		
         }
     }
 
@@ -295,9 +295,10 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     public void ReadFileWithFixedSizeBuffer(RandomAccessFile aFile) throws IOException{
         FileChannel inChannel = aFile.getChannel();
         ByteBuffer buffer = ByteBuffer.allocate(10000);
-        byte[] data = new byte[10000];
+        
         while(inChannel.read(buffer) > 0)
         {
+            byte[] data = new byte[10000];
             buffer.flip();
             for (int i = 0; i < buffer.limit(); i++)
             {
