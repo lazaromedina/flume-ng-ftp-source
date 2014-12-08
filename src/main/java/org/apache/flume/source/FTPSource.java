@@ -97,7 +97,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
         try 
         {  
             Thread.sleep(this.ftpSourceUtils.getRunDiscoverDelay());				
-            return PollableSource.Status.READY;
+            return PollableSource.Status.READY;     //source was successfully able to generate events
         } catch(InterruptedException inte){
             inte.printStackTrace();
             return PollableSource.Status.BACKOFF;	//inform the runner thread to back off for a bit		
@@ -187,28 +187,14 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                } //no se ha modificado
                                
                         } else { //nuevo archivo encontrado
-                                
-                                RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");
-                                if (ranAcFile.length() > 100000){
-                                    log.warn(file.getFileName() + " WARNING : excess initial size, calling butcher.. ");
+                                    RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");
                                     sizeFileList.put(file.toFile(), ranAcFile.length());
-                                   ReadFileWithFixedSizeBuffer(ranAcFile);
+                                    log.info("discovered: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size() 
+                                                                        ); 
+                                    ReadFileWithFixedSizeBuffer(ranAcFile);
                                    //ranAcFile.close();
                                    //return FileVisitResult.CONTINUE;
-                                    
-                                } else { //normal file
-                                    sizeFileList.put(file.toFile(), ranAcFile.length());
-                                    byte[] data = new byte[(int) ranAcFile.length()];
-                                    ranAcFile.read(data);
-                                    String lastInfo = new String(data);
-                                    processMessage("discovered: " + file.getFileName() + "," +
-                                                                     attributes.fileKey() + " ," +
-                                                                     sizeFileList.size() + ": " +
-                                                                      lastInfo
-                                                                     );
-                                    ranAcFile.close();
-                                }
-                        }
+                                 }
                     return FileVisitResult.CONTINUE;  
                 
                 }
