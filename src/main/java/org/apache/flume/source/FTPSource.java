@@ -156,7 +156,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                if (size > 0) {
                                    sizeFileList.put(file.toFile(), ranAcFile.length());
                                    ReadFileWithFixedSizeBuffer(ranAcFile);
-                                   log.info("Modified: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size());
+                                   log.info("Modified: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size() );
                                     
                                } else if (size == 0) { //known & NOT modified 
                                    ranAcFile.close();
@@ -242,12 +242,13 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     /*
     @void, Read a large file in chunks with fixed size buffer and process chunk
     */
-    public void ReadFileWithFixedSizeBuffer(RandomAccessFile aFile) throws IOException{
+    public long ReadFileWithFixedSizeBuffer(RandomAccessFile aFile) throws IOException{
         FileChannel inChannel = aFile.getChannel();
         ByteBuffer buffer = ByteBuffer.allocateDirect(chunkSize);
-           
+        long mark = 0;    
             while(inChannel.read(buffer) > 0)
             {
+                mark = inChannel.position();
                 FileLock lock = inChannel.lock(inChannel.position(), chunkSize, true);
                 byte[] data = new byte[chunkSize];
                 buffer.flip(); //alias for buffer.limit(buffer.position()).position(0)
@@ -261,7 +262,9 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
             }
         inChannel.close();
         aFile.close();
+        return mark;
     }
+    
     
     
 }
