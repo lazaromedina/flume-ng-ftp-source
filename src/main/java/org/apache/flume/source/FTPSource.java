@@ -157,15 +157,17 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");                             
                                ranAcFile.seek(sizeFileList.get(file.toFile()));
                                long size = ranAcFile.length() - sizeFileList.get(file.toFile());
+                               log.info("restado: " + ranAcFile.length() + " menos " + sizeFileList.get(file.toFile()));
                                if (size > 0) {
-                                   sizeFileList.put(file.toFile(), ranAcFile.length());
-                                   ReadFileWithFixedSizeBuffer(ranAcFile);
-                                   log.info("Modified: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size() );
+                                   //sizeFileList.put(file.toFile(), ranAcFile.length());
+                                   log.info("Modified: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size() +  " ,size: " + size +  " , Actual "  + ranAcFile.length() + ", Guardado " + sizeFileList.get(file.toFile()));
+                                   ReadFileWithFixedSizeBuffer(ranAcFile, file.toFile());
+                                   
                                     
                                } else if (size == 0){ //known & NOT modified
                                    if (markFileList.get(file.toFile()) < ranAcFile.length() ){
-                                    log.info("size processed: " + file.getFileName()+ ", " + markFileList.get(file.toFile()) + " of " + ranAcFile.length()  );
-                                    ranAcFile.seek(markFileList.get(file.toFile()));
+                                    log.info("size processed: " + file.getFileName()+ ", " + markFileList.get(file.toFile()) + " of  " + ranAcFile.length() + ", Guardado " + sizeFileList.get(file.toFile()));
+                                    //ranAcFile.seek(markFileList.get(file.toFile()));
                                     //ReadFileWithFixedSizeBuffer(ranAcFile, file.toFile());
                                     //ranAcFile.close(); si no comentado tira null pointer
                                    }
@@ -173,14 +175,14 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                } else if (size < 0) { //known &  modified from offset 0
                                    ranAcFile.seek(0);
                                    sizeFileList.put(file.toFile(), ranAcFile.length());
-                                   ReadFileWithFixedSizeBuffer(ranAcFile);
                                    log.info("full modified: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size());
+                                   ReadFileWithFixedSizeBuffer(ranAcFile);
                                }
                                
                         } else {    //new File
                                     final RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");
                                     sizeFileList.put(file.toFile(), ranAcFile.length());
-                                    log.info("discovered: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size() );
+                                    log.info("discovered: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size() + " , Actual "  + ranAcFile.length() + ", guardo Ac " + sizeFileList.get(file.toFile()));
                                     Thread threadNewFile = new Thread( new Runnable(){
                                     @Override
                                     public void run(){
@@ -282,6 +284,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
             while(inChannel.read(buffer) > 0)
             {
                 markFileList.put(file, inChannel.position());
+                sizeFileList.put(file, inChannel.size());
                 FileLock lock = inChannel.lock(inChannel.position(), chunkSize, true);
                 byte[] data = new byte[chunkSize];
                 buffer.flip(); //alias for buffer.limit(buffer.position()).position(0)
