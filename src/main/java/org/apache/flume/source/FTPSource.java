@@ -66,6 +66,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     private static final Logger log = LoggerFactory.getLogger(FTPSource.class);
     private FTPSourceUtils ftpSourceUtils;
     private HashMap<File, Long> sizeFileList = new HashMap<>();
+    private HashMap<File, Long> markFileList = new HashMap<>();
     private final int chunkSize = 10000;
        
     @Override
@@ -78,6 +79,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
         log.info("Loading previous flumed data.....  " + getName());
         try {
                 sizeFileList = loadMap("hasmap.ser");
+                markFileList = loadMap("hasmap.ser");
                 } catch (ClassNotFoundException | IOException e){
                     e.printStackTrace();
                     log.error("Fail to load previous flumed data.");
@@ -111,6 +113,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     @Override
     public void stop() {
             saveMap(sizeFileList);
+            saveMap(markFileList);
             log.info("Stopping sql source {} ...", getName());
             try { 
                  ftpSourceUtils.getFtpClient().logout();
@@ -146,9 +149,10 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
   
             Files.walkFileTree(start, new SimpleFileVisitor<Path>() {  
                 @Override  
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                public FileVisitResult visitFile(final Path file, BasicFileAttributes attributes) throws IOException {
                         
                          cleanList(sizeFileList);
+                         //cleanList(markFileList);
                          if (sizeFileList.containsKey(file.toFile())){                              // known file
                                RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");                             
                                ranAcFile.seek(sizeFileList.get(file.toFile()));
@@ -158,7 +162,13 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                    ReadFileWithFixedSizeBuffer(ranAcFile);
                                    log.info("Modified: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size() );
                                     
-                               } else if (size == 0) { //known & NOT modified 
+                               } else if (size == 0){ //known & NOT modified
+                                   if (markFileList.get(file.toFile()) < ranAcFile.length() ){
+                                    log.info("size processed: " + file.getFileName()+ ", " + markFileList.get(file.toFile()) + " of " + ranAcFile.length()  );
+                                    ranAcFile.seek(markFileList.get(file.toFile()));
+                                    //ReadFileWithFixedSizeBuffer(ranAcFile, file.toFile());
+                                    //ranAcFile.close(); si no comentado tira null pointer
+                                   }
                                    ranAcFile.close();
                                } else if (size < 0) { //known &  modified from offset 0
                                    ranAcFile.seek(0);
@@ -167,7 +177,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                    log.info("full modified: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size());
                                }
                                
-                        } else {                                                                    //new File
+                        } else {    //new File
                                     final RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");
                                     sizeFileList.put(file.toFile(), ranAcFile.length());
                                     log.info("discovered: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size() );
@@ -175,7 +185,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                     @Override
                                     public void run(){
                                         try {
-                                        ReadFileWithFixedSizeBuffer(ranAcFile);
+                                        ReadFileWithFixedSizeBuffer(ranAcFile, file.toFile());
                                         } catch(IOException e) {
                                             e.printStackTrace();
                                         }
@@ -242,13 +252,11 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     /*
     @void, Read a large file in chunks with fixed size buffer and process chunk
     */
-    public long ReadFileWithFixedSizeBuffer(RandomAccessFile aFile) throws IOException{
+    public void ReadFileWithFixedSizeBuffer(RandomAccessFile aFile) throws IOException{
         FileChannel inChannel = aFile.getChannel();
         ByteBuffer buffer = ByteBuffer.allocateDirect(chunkSize);
-        long mark = 0;    
             while(inChannel.read(buffer) > 0)
             {
-                mark = inChannel.position();
                 FileLock lock = inChannel.lock(inChannel.position(), chunkSize, true);
                 byte[] data = new byte[chunkSize];
                 buffer.flip(); //alias for buffer.limit(buffer.position()).position(0)
@@ -262,9 +270,32 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
             }
         inChannel.close();
         aFile.close();
-        return mark;
     }
     
+    
+    /*
+    @void, Read a large file in chunks with fixed size buffer and process chunk
+    */
+    public void ReadFileWithFixedSizeBuffer(RandomAccessFile aFile, File file) throws IOException{
+        FileChannel inChannel = aFile.getChannel();
+        ByteBuffer buffer = ByteBuffer.allocateDirect(chunkSize);
+            while(inChannel.read(buffer) > 0)
+            {
+                markFileList.put(file, inChannel.position());
+                FileLock lock = inChannel.lock(inChannel.position(), chunkSize, true);
+                byte[] data = new byte[chunkSize];
+                buffer.flip(); //alias for buffer.limit(buffer.position()).position(0)
+                for (int i = 0;  i < buffer.limit();  i++)
+                {
+                    data[i] =buffer.get();
+                }
+                processMessage(data);
+                buffer.clear(); // sets the limit to the capacity and the position back to 0 
+                lock.release();
+            }
+        inChannel.close();
+        aFile.close();
+    }
     
     
 }
