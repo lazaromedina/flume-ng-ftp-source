@@ -67,7 +67,8 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     private FTPSourceUtils ftpSourceUtils;
     private HashMap<File, Long> sizeFileList = new HashMap<>();
     private HashMap<File, Long> markFileList = new HashMap<>();
-    private final int chunkSize = 10000;
+    private HashMap<File, Boolean> channelList = new HashMap<>();
+    private final int chunkSize = 1024;
        
     @Override
     public void configure(Context context) {            
@@ -78,8 +79,11 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
         }
         log.info("Loading previous flumed data.....  " + getName());
         try {
-                sizeFileList = loadMap("hasmap.ser");
-                markFileList = loadMap("hasmap.ser");
+                sizeFileList = loadMap("1hasmap.ser");
+                markFileList = loadMap("2hasmap.ser");
+                channelList = loadMapB("3hasmap.ser");
+                closeChannel(channelList);
+                
                 } catch (ClassNotFoundException | IOException e){
                     e.printStackTrace();
                     log.error("Fail to load previous flumed data.");
@@ -90,7 +94,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     @enum Status , process source configured from context
     */
     public PollableSource.Status process() throws EventDeliveryException {
-        
+       
        discoverElements();
 
         try 
@@ -112,8 +116,9 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
 
     @Override
     public void stop() {
-            saveMap(sizeFileList);
-            saveMap(markFileList);
+            saveMap(sizeFileList, 1);
+            saveMap(markFileList, 2);
+            saveMapB(channelList,3);
             log.info("Stopping sql source {} ...", getName());
             try { 
                  ftpSourceUtils.getFtpClient().logout();
@@ -154,34 +159,54 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                          cleanList(sizeFileList);
                          //cleanList(markFileList);
                          if (sizeFileList.containsKey(file.toFile())){                              // known file
-                               RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");                             
+                               final RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");                             
                                ranAcFile.seek(sizeFileList.get(file.toFile()));
                                long size = ranAcFile.length() - sizeFileList.get(file.toFile());
-                               log.info("restado: " + ranAcFile.length() + " menos " + sizeFileList.get(file.toFile()));
+                               //log.info("restado: " + ranAcFile.length() + " menos " + sizeFileList.get(file.toFile()) );
                                if (size > 0) {
-                                   //sizeFileList.put(file.toFile(), ranAcFile.length());
-                                   log.info("Modified: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size() +  " ,size: " + size +  " , Actual "  + ranAcFile.length() + ", Guardado " + sizeFileList.get(file.toFile()));
+                                   sizeFileList.put(file.toFile(), ranAcFile.length());
+                                   log.info("Modified: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size() +  " ,size: " + size +  " , Actual "  + ranAcFile.length() + ", Guardado " + sizeFileList.get(file.toFile()) + ", marca " + markFileList.get(file.toFile()));
                                    ReadFileWithFixedSizeBuffer(ranAcFile, file.toFile());
                                    
                                     
-                               } else if (size == 0){ //known & NOT modified
+                               } else if (size == 0 ){ //known & NOT modified
                                    if (markFileList.get(file.toFile()) < ranAcFile.length() ){
-                                    log.info("size processed: " + file.getFileName()+ ", " + markFileList.get(file.toFile()) + " of  " + ranAcFile.length() + ", Guardado " + sizeFileList.get(file.toFile()));
-                                    //ranAcFile.seek(markFileList.get(file.toFile()));
-                                    //ReadFileWithFixedSizeBuffer(ranAcFile, file.toFile());
-                                    //ranAcFile.close(); si no comentado tira null pointer
+                                       if (channelList.get(file.toFile())){
+                                           log.info("channel open: " + file.getFileName()+ ", " + markFileList.get(file.toFile()) + " of  " + ranAcFile.length() + ", Guardado " + sizeFileList.get(file.toFile()) + ", marca " + markFileList.get(file.toFile()) );
+                                           ranAcFile.close(); 
+                                       } else {
+                                           log.info("channel closed: " + file.getFileName()+ ", " + markFileList.get(file.toFile()) + " of  " + ranAcFile.length() + ", Guardado " + sizeFileList.get(file.toFile()) + ", marca " + markFileList.get(file.toFile()) );
+                                          
+                                           Thread threadReFile = new Thread( new Runnable(){
+                                            @Override
+                                            public void run(){
+                                                try {
+                                                    channelList.put(file.toFile(),true);
+                                                    final RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");
+                                                    ranAcFile.seek(markFileList.get(file.toFile()));
+                                                    ReadFileWithFixedSizeBuffer(ranAcFile, file.toFile());
+                                                    } catch(IOException e) {
+                                                        e.printStackTrace();
+                                                    }
+                                            }
+                                                    });
+                                                    threadReFile.setName("hiloReFile_" + file.getFileName());
+                                                    threadReFile.start();
+
+                                           }
                                    }
                                    ranAcFile.close();
                                } else if (size < 0) { //known &  modified from offset 0
                                    ranAcFile.seek(0);
                                    sizeFileList.put(file.toFile(), ranAcFile.length());
                                    log.info("full modified: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size());
-                                   ReadFileWithFixedSizeBuffer(ranAcFile);
+                                   ReadFileWithFixedSizeBuffer(ranAcFile, file.toFile());
                                }
                                
                         } else {    //new File
                                     final RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");
                                     sizeFileList.put(file.toFile(), ranAcFile.length());
+                                    channelList.put(file.toFile(),true);
                                     log.info("discovered: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size() + " , Actual "  + ranAcFile.length() + ", guardo Ac " + sizeFileList.get(file.toFile()));
                                     Thread threadNewFile = new Thread( new Runnable(){
                                     @Override
@@ -226,9 +251,25 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     /*
     @void Serialize hashmap
     */
-    public void saveMap(HashMap<File, Long> map){
+    public void saveMap(HashMap<File, Long> map, int num){
         try { 
-            FileOutputStream fileOut = new FileOutputStream("hasmap.ser");
+            FileOutputStream fileOut = new FileOutputStream(num + "hasmap.ser");
+            ObjectOutputStream out = new ObjectOutputStream(fileOut);
+            out.writeObject(map);
+            out.close();
+        } catch(FileNotFoundException e){
+            e.printStackTrace();
+        } catch (IOException e){
+            e.printStackTrace();
+        }
+    }
+    
+    /*
+    @void Serialize hashmap
+    */
+    public void saveMapB(HashMap<File, Boolean> map, int num){
+        try { 
+            FileOutputStream fileOut = new FileOutputStream(num + "hasmap.ser");
             ObjectOutputStream out = new ObjectOutputStream(fileOut);
             out.writeObject(map);
             out.close();
@@ -240,10 +281,23 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     }
     
     
+    
     /*
     @return HashMap<File,Long> objects
     */
     public HashMap<File,Long> loadMap(String name) throws ClassNotFoundException, IOException{
+        FileInputStream map = new FileInputStream(name);
+        ObjectInputStream in = new ObjectInputStream(map);
+        HashMap hasMap = (HashMap)in.readObject();
+        return hasMap;
+        
+    } 
+    
+    
+    /*
+    @return HashMap<File,Long> objects
+    */
+    public HashMap<File,Boolean> loadMapB(String name) throws ClassNotFoundException, IOException{
         FileInputStream map = new FileInputStream(name);
         ObjectInputStream in = new ObjectInputStream(map);
         HashMap hasMap = (HashMap)in.readObject();
@@ -281,24 +335,37 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     public void ReadFileWithFixedSizeBuffer(RandomAccessFile aFile, File file) throws IOException{
         FileChannel inChannel = aFile.getChannel();
         ByteBuffer buffer = ByteBuffer.allocateDirect(chunkSize);
+         
             while(inChannel.read(buffer) > 0)
             {
-                markFileList.put(file, inChannel.position());
-                sizeFileList.put(file, inChannel.size());
+                markFileList.put(file,inChannel.position());
                 FileLock lock = inChannel.lock(inChannel.position(), chunkSize, true);
                 byte[] data = new byte[chunkSize];
                 buffer.flip(); //alias for buffer.limit(buffer.position()).position(0)
                 for (int i = 0;  i < buffer.limit();  i++)
                 {
                     data[i] =buffer.get();
-                }
+                }                
                 processMessage(data);
                 buffer.clear(); // sets the limit to the capacity and the position back to 0 
                 lock.release();
             }
+        channelList.put(file,false);    
         inChannel.close();
         aFile.close();
     }
     
+    
+    /*
+    @return void, if any channel persists opened must be closed of reboot process
+    */
+    public void closeChannel(HashMap<File, Boolean> map){
+        for (Iterator<File> iter=map.keySet().iterator();iter.hasNext();) {
+          final File file = iter.next();
+          if (map.get(file)){ 
+              map.put(file, Boolean.FALSE);
+          }
+        }
+    }
     
 }
