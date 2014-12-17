@@ -79,9 +79,22 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
         }
         log.info("Loading previous flumed data.....  " + getName());
         try {
-                sizeFileList = loadMap("1hasmap.ser");
-                markFileList = loadMap("2hasmap.ser");
-                channelList = loadMapB("3hasmap.ser");
+                sizeFileList = loadMap("1hasmapS.ser");
+                markFileList = loadMap("2hasmapS.ser");
+                channelList = loadMapB("hasmapB.ser");
+                
+                for (File file : sizeFileList.keySet()){
+                log.info("cargado sizeFileList :" + sizeFileList.get(file));
+            }
+                
+                for (File file : markFileList.keySet()){
+                log.info("cargado markFileList :" + markFileList.get(file));
+            }
+                
+                for (File file : channelList.keySet()){
+                log.info("cargado channelList :" + channelList.get(file));
+            }
+                
                 closeChannel(channelList);
                 
                 } catch (ClassNotFoundException | IOException e){
@@ -118,7 +131,18 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     public void stop() {
             saveMap(sizeFileList, 1);
             saveMap(markFileList, 2);
-            saveMapB(channelList,3);
+            saveMapB(channelList);
+            for (File file : sizeFileList.keySet()){
+                log.info("save sizeFileList :" + sizeFileList.get(file));
+            }
+                
+                for (File file : markFileList.keySet()){
+                log.info("save markFileList :" + markFileList.get(file));
+            }
+                
+                for (File file : channelList.keySet()){
+                log.info("save channelList :" + channelList.get(file));
+            }
             log.info("Stopping sql source {} ...", getName());
             try { 
                  ftpSourceUtils.getFtpClient().logout();
@@ -162,7 +186,6 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                final RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");                             
                                ranAcFile.seek(sizeFileList.get(file.toFile()));
                                long size = ranAcFile.length() - sizeFileList.get(file.toFile());
-                               //log.info("restado: " + ranAcFile.length() + " menos " + sizeFileList.get(file.toFile()) );
                                if (size > 0) {
                                    sizeFileList.put(file.toFile(), ranAcFile.length());
                                    log.info("Modified: " + file.getFileName() + "," + attributes.fileKey() + " ," + sizeFileList.size() +  " ,size: " + size +  " , Actual "  + ranAcFile.length() + ", Guardado " + sizeFileList.get(file.toFile()) + ", marca " + markFileList.get(file.toFile()));
@@ -253,7 +276,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     */
     public void saveMap(HashMap<File, Long> map, int num){
         try { 
-            FileOutputStream fileOut = new FileOutputStream(num + "hasmap.ser");
+            FileOutputStream fileOut = new FileOutputStream(num + "hasmapS.ser");
             ObjectOutputStream out = new ObjectOutputStream(fileOut);
             out.writeObject(map);
             out.close();
@@ -264,12 +287,14 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
         }
     }
     
+    
+    
     /*
     @void Serialize hashmap
     */
-    public void saveMapB(HashMap<File, Boolean> map, int num){
+    public void saveMapB(HashMap<File, Boolean> map){
         try { 
-            FileOutputStream fileOut = new FileOutputStream(num + "hasmap.ser");
+            FileOutputStream fileOut = new FileOutputStream("hasmapB.ser");
             ObjectOutputStream out = new ObjectOutputStream(fileOut);
             out.writeObject(map);
             out.close();
@@ -289,11 +314,12 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
         FileInputStream map = new FileInputStream(name);
         ObjectInputStream in = new ObjectInputStream(map);
         HashMap hasMap = (HashMap)in.readObject();
+        in.close();
         return hasMap;
         
     } 
     
-    
+        
     /*
     @return HashMap<File,Long> objects
     */
@@ -301,6 +327,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
         FileInputStream map = new FileInputStream(name);
         ObjectInputStream in = new ObjectInputStream(map);
         HashMap hasMap = (HashMap)in.readObject();
+        in.close();
         return hasMap;
         
     } 
@@ -335,10 +362,9 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     public void ReadFileWithFixedSizeBuffer(RandomAccessFile aFile, File file) throws IOException{
         FileChannel inChannel = aFile.getChannel();
         ByteBuffer buffer = ByteBuffer.allocateDirect(chunkSize);
-         
             while(inChannel.read(buffer) > 0)
             {
-                markFileList.put(file,inChannel.position());
+                markFileList.put(file,inChannel.position());                
                 FileLock lock = inChannel.lock(inChannel.position(), chunkSize, true);
                 byte[] data = new byte[chunkSize];
                 buffer.flip(); //alias for buffer.limit(buffer.position()).position(0)
@@ -350,6 +376,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                 buffer.clear(); // sets the limit to the capacity and the position back to 0 
                 lock.release();
             }
+            
         channelList.put(file,false);    
         inChannel.close();
         aFile.close();
