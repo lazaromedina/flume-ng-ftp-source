@@ -20,6 +20,7 @@ package org.apache.flume.source;
 
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Iterator;
 
@@ -68,6 +69,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
     private HashMap<File, Long> sizeFileList = new HashMap<>();
     private HashMap<File, Long> markFileList = new HashMap<>();
     private HashMap<File, Boolean> channelList = new HashMap<>();
+    private HashSet<File> deletedFiles = new HashSet<>();
     private final int chunkSize = 1024;
        
     @Override
@@ -181,7 +183,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                 public FileVisitResult visitFile(final Path file, BasicFileAttributes attributes) throws IOException {
                         
                          cleanList(sizeFileList);
-                         //cleanList(markFileList);
+                         cleanListMirror(markFileList);
                          if (sizeFileList.containsKey(file.toFile())){                              // known file
                                final RandomAccessFile ranAcFile = new RandomAccessFile(file.toFile(), "r");                             
                                ranAcFile.seek(sizeFileList.get(file.toFile()));
@@ -245,6 +247,7 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
                                     threadNewFile.start();
                                     
                                  }
+                        
                     return FileVisitResult.CONTINUE;  
                 
                 }
@@ -266,10 +269,19 @@ public class FTPSource extends AbstractSource implements Configurable, PollableS
           final File file = iter.next();
           if (!(file.exists())){ 
               iter.remove();
+              deletedFiles.add(file);
           }
         }
     }
     
+    /*
+    @void. Avoid double concurrent access
+    */
+    public void cleanListMirror(HashMap<File,Long> map){
+        for (File file: deletedFiles){
+            map.remove(file);
+        }
+    }
     
     /*
     @void Serialize hashmap
