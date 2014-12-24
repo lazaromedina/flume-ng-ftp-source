@@ -7,6 +7,7 @@ package org.apache.flume.source;
 
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPFile;
+import org.apache.commons.net.ftp.FTP;
 
 import org.apache.flume.Context;
 import org.slf4j.Logger;
@@ -47,6 +48,8 @@ public class FTPSourceUtils {
         try {
                 ftpClient.connect(server);
                 login = ftpClient.login(user,password);
+                ftpClient.enterLocalPassiveMode();
+                ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
             } catch(FTPConnectionClosedException  ioe) {
                 log.error("Client being idle or some other reason causing the server to send FTP reply code 421");
                 ioe.printStackTrace();
